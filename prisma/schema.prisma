@@ -1,0 +1,72 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+model User {
+  id           String        @id @default(uuid())
+  name         String
+  email        String        @unique
+  password     String
+  avatarUrl    String?
+  darkMode     Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  categories   Category[]
+  transactions Transaction[]
+  savingsGoals SavingsGoal[]
+}
+
+model Category {
+  id           String          @id @default(uuid())
+  name         String
+  icon         String
+  type         TransactionType
+  isDefault    Boolean         @default(false)
+  userId       String?
+  user         User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([userId])
+}
+
+model Transaction {
+  id         String          @id @default(uuid())
+  userId     String
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   Category        @relation(fields: [categoryId], references: [id])
+  title      String
+  amount     Float
+  type       TransactionType
+  date       DateTime        @default(now())
+
+  @@index([userId])
+  @@index([categoryId])
+}
+
+model SavingsGoal {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  targetAmount Float
+  savedAmount  Float    @default(0)
+  icon         String
+  bgColor      String
+  iconColor    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+}
