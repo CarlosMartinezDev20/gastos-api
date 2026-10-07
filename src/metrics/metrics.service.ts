@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { TransactionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { SAVINGS_CATEGORY_NAME } from '../categories/categories.service';
 
 @Injectable()
 export class MetricsService {
@@ -9,7 +10,8 @@ export class MetricsService {
   async getCategoryExpenses(userId: string) {
     const expenses = await this.prisma.transaction.groupBy({
       by: ['categoryId'],
-      where: { userId, type: TransactionType.EXPENSE },
+      // Goal contributions are savings, not spending.
+      where: { userId, type: TransactionType.EXPENSE, goalId: null },
       _sum: { amount: true },
     });
 
@@ -41,6 +43,9 @@ export class MetricsService {
   }
 
   async getSavingsEfficiency(userId: string) {
+    const savingsCategory = await this.prisma.category.findFirst({
+      where: { name: SAVINGS_CATEGORY_NAME, isDefault: true, userId: null },
+    });
     const [incomeAgg, savingsExpenses] = await Promise.all([
       this.prisma.transaction.aggregate({
         where: { userId, type: TransactionType.INCOME },
@@ -50,7 +55,7 @@ export class MetricsService {
         where: {
           userId,
           type: TransactionType.EXPENSE,
-          title: { startsWith: 'Ahorro:' },
+          categoryId: savingsCategory?.id ?? '',
         },
         _sum: { amount: true },
       }),

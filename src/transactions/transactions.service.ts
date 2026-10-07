@@ -5,14 +5,21 @@ import {
 } from '@nestjs/common';
 import { Prisma, TransactionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { RecurringService } from '../recurring/recurring.service';
+import { resolveMovementCategory } from './category-rules';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { FilterTransactionsDto } from './dto/filter-transactions.dto';
+import { UpdateTransactionDto } from './dto/update-transaction.dto';
 
 @Injectable()
 export class TransactionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly recurring: RecurringService,
+  ) {}
 
   async findAll(userId: string, filters: FilterTransactionsDto) {
+    await this.recurring.materialize(userId);
     const where: Prisma.TransactionWhereInput = { userId };
 
     if (filters.type) where.type = filters.type;
@@ -31,21 +38,8 @@ export class TransactionsService {
   }
 
   async create(userId: string, dto: CreateTransactionDto) {
-    const category = await this.prisma.category.findFirst({
-      where: {
-        id: dto.categoryId,
-        OR: [{ isDefault: true, userId: null }, { userId }],
-      },
-    });
-    if (!category) {
-      throw new NotFoundException('Categoría no encontrada');
-    }
-    if (category.type !== dto.type) {
-      throw new BadRequestException(
-        'El tipo de transacción no coincide con la categoría',
-      );
-    }
-
+    await this.resolveCategory(userId, dto.categoryId, dto.type);
+    await this.assertPaymentMethod(userId, dto.paymentMethodId);
     return this.prisma.transaction.create({
       data: {
         userId,
@@ -54,12 +48,81 @@ export class TransactionsService {
         amount: dto.amount,
         type: dto.type,
         date: dto.date ? new Date(dto.date) : undefined,
+        paymentMethodId: dto.paymentMethodId ?? null,
+        reference: dto.reference?.trim() || null,
       },
       include: { category: true },
     });
   }
 
+  async update(userId: string, id: string, dto: UpdateTransactionDto) {
+    const current = await this.findEditable(userId, id);
+    const categoryId = dto.categoryId ?? current.categoryId;
+    const type = dto.type ?? current.type;
+    if (dto.categoryId || dto.type) {
+      await this.resolveCategory(userId, categoryId, type);
+    }
+    await this.assertPaymentMethod(userId, dto.paymentMethodId);
+    return this.prisma.transaction.update({
+      where: { id },
+      data: {
+        categoryId,
+        type,
+        title: dto.title,
+        amount: dto.amount,
+        date: dto.date ? new Date(dto.date) : undefined,
+        // undefined keeps them; null clears them.
+        paymentMethodId: dto.paymentMethodId,
+        reference:
+          dto.reference === undefined
+            ? undefined
+            : dto.reference?.trim() || null,
+      },
+      include: { category: true },
+    });
+  }
+
+  async remove(userId: string, id: string) {
+    await this.findEditable(userId, id);
+    await this.prisma.transaction.delete({ where: { id } });
+    return { id };
+  }
+
+  /** A user's transaction that is not a goal contribution. */
+  private async findEditable(userId: string, id: string) {
+    const transaction = await this.prisma.transaction.findFirst({
+      where: { id, userId },
+    });
+    if (!transaction) {
+      throw new NotFoundException('Movimiento no encontrado');
+    }
+    if (transaction.goalId) {
+      throw new BadRequestException(
+        'Los aportes de ahorro se gestionan desde Metas',
+      );
+    }
+    return transaction;
+  }
+
+  /** A payment method, when given, must be one of the user's own. */
+  private async assertPaymentMethod(userId: string, id?: string | null) {
+    if (!id) return;
+    const method = await this.prisma.paymentMethod.findFirst({
+      where: { id, userId },
+    });
+    if (!method) throw new NotFoundException('Método de pago no encontrado');
+  }
+
+  private resolveCategory(
+    userId: string,
+    categoryId: string,
+    type: TransactionType,
+  ) {
+    return resolveMovementCategory(this.prisma, userId, categoryId, type);
+  }
+
   async getBalance(userId: string) {
+    await this.recurring.materialize(userId);
     const [incomeAgg, expenseAgg] = await Promise.all([
       this.prisma.transaction.aggregate({
         where: { userId, type: TransactionType.INCOME },

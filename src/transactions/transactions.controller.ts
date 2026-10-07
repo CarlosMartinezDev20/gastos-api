@@ -1,7 +1,19 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiParam,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -13,6 +25,7 @@ import {
 import { TransactionsService } from './transactions.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { FilterTransactionsDto } from './dto/filter-transactions.dto';
+import { UpdateTransactionDto } from './dto/update-transaction.dto';
 
 @ApiTags('Transactions')
 @ApiBearerAuth()
@@ -57,5 +70,32 @@ export class TransactionsController {
     @Body() dto: CreateTransactionDto,
   ) {
     return this.transactionsService.create(user.sub, dto);
+  }
+
+  @Patch(':id')
+  @ApiParam({ name: 'id', description: 'ID del movimiento' })
+  @ApiOperation({ summary: 'Editar un ingreso o gasto' })
+  @ApiResponse({ status: 200, description: 'Movimiento actualizado' })
+  @ApiResponse({
+    status: 400,
+    description: 'Aporte de ahorro o datos inválidos',
+  })
+  update(
+    @CurrentUser() user: JwtPayloadUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateTransactionDto,
+  ) {
+    return this.transactionsService.update(user.sub, id, dto);
+  }
+
+  @Delete(':id')
+  @ApiParam({ name: 'id', description: 'ID del movimiento' })
+  @ApiOperation({ summary: 'Eliminar un ingreso o gasto' })
+  @ApiResponse({ status: 200, description: 'Movimiento eliminado' })
+  remove(
+    @CurrentUser() user: JwtPayloadUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.transactionsService.remove(user.sub, id);
   }
 }

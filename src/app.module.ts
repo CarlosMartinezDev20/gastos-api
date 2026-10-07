@@ -9,6 +9,9 @@ import { CategoriesModule } from './categories/categories.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { SavingsGoalsModule } from './savings-goals/savings-goals.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { BudgetsModule } from './budgets/budgets.module';
+import { RecurringModule } from './recurring/recurring.module';
+import { PaymentMethodsModule } from './payment-methods/payment-methods.module';
 
 @Module({
   imports: [
@@ -27,6 +30,9 @@ import { MetricsModule } from './metrics/metrics.module';
     TransactionsModule,
     SavingsGoalsModule,
     MetricsModule,
+    BudgetsModule,
+    RecurringModule,
+    PaymentMethodsModule,
   ],
   providers: [
     {

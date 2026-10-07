@@ -1,7 +1,18 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiParam,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -12,6 +23,7 @@ import {
 } from '../common/decorators/current-user.decorator';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateCategoryDto } from './dto/update-category.dto';
 
 @ApiTags('Categories')
 @ApiBearerAuth()
@@ -32,10 +44,36 @@ export class CategoriesController {
   @Post()
   @ApiOperation({ summary: 'Crear categoría personalizada' })
   @ApiResponse({ status: 201, description: 'Categoría creada' })
-  create(
-    @CurrentUser() user: JwtPayloadUser,
-    @Body() dto: CreateCategoryDto,
-  ) {
+  create(@CurrentUser() user: JwtPayloadUser, @Body() dto: CreateCategoryDto) {
     return this.categoriesService.create(user.sub, dto);
+  }
+
+  @Patch(':id')
+  @ApiParam({ name: 'id', description: 'ID de la categoría' })
+  @ApiOperation({ summary: 'Editar una categoría personalizada' })
+  @ApiResponse({ status: 200, description: 'Categoría actualizada' })
+  @ApiResponse({ status: 404, description: 'No existe o es del sistema' })
+  @ApiResponse({ status: 409, description: 'Nombre repetido o tipo en uso' })
+  update(
+    @CurrentUser() user: JwtPayloadUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCategoryDto,
+  ) {
+    return this.categoriesService.update(user.sub, id, dto);
+  }
+
+  @Delete(':id')
+  @ApiParam({ name: 'id', description: 'ID de la categoría' })
+  @ApiOperation({
+    summary: 'Eliminar una categoría personalizada sin movimientos',
+  })
+  @ApiResponse({ status: 200, description: 'Categoría eliminada' })
+  @ApiResponse({ status: 404, description: 'No existe o es del sistema' })
+  @ApiResponse({ status: 409, description: 'Tiene movimientos' })
+  remove(
+    @CurrentUser() user: JwtPayloadUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.categoriesService.remove(user.sub, id);
   }
 }

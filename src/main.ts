@@ -12,7 +12,10 @@ async function bootstrap() {
   const corsOrigin = process.env.CORS_ORIGIN ?? '*';
   const allowedOrigins = corsOrigin.split(',').map((o) => o.trim());
   app.enableCors({
-    origin: (origin, callback) => {
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
       if (!origin || corsOrigin === '*' || allowedOrigins.includes(origin)) {
         callback(null, true);
         return;
@@ -62,4 +65,4 @@ async function bootstrap() {
   console.log(`🚀 API en http://localhost:${port}`);
   console.log(`📚 Swagger en http://localhost:${port}/api/docs`);
 }
-bootstrap();
+void bootstrap();
