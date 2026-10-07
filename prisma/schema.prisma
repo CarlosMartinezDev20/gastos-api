@@ -101,7 +101,8 @@ model Transaction {
   // Free reference, e.g. the generation code of a scanned electronic invoice.
   reference       String?
 
-  @@index([userId])
+  // Every list, budget and statement query filters by user and date range.
+  @@index([userId, date])
   @@index([categoryId])
   @@index([goalId])
   @@index([paymentMethodId])
