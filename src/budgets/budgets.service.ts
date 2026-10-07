@@ -6,6 +6,7 @@ import {
 import { TransactionType } from '@prisma/client';
 import { SAVINGS_CATEGORY_NAME } from '../categories/categories.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { money } from '../common/money';
 
 const round = (value: number) => Math.round(value * 100) / 100;
 
@@ -40,19 +41,20 @@ export class BudgetsService {
       _sum: { amount: true },
     });
     const spent = new Map(
-      spending.map((s) => [s.categoryId, s._sum.amount ?? 0]),
+      spending.map((s) => [s.categoryId, money(s._sum.amount)]),
     );
 
     return budgets.map((budget) => {
-      const used = round(spent.get(budget.categoryId) ?? 0);
+      const used = spent.get(budget.categoryId) ?? 0;
+      const limit = money(budget.amount);
       return {
         id: budget.id,
         categoryId: budget.categoryId,
         category: budget.category,
-        amount: round(budget.amount),
+        amount: limit,
         spent: used,
-        remaining: round(budget.amount - used),
-        percent: budget.amount > 0 ? round((used / budget.amount) * 100) : 0,
+        remaining: money(limit - used),
+        percent: limit > 0 ? round((used / limit) * 100) : 0,
       };
     });
   }

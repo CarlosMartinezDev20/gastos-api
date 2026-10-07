@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
+import { DecimalToNumberInterceptor } from './common/decimal-to-number.interceptor';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -32,6 +33,7 @@ async function bootstrap() {
     credentials: true,
   });
 
+  app.useGlobalInterceptors(new DecimalToNumberInterceptor());
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

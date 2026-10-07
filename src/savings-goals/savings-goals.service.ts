@@ -10,6 +10,7 @@ import { TransactionsService } from '../transactions/transactions.service';
 import { CreateSavingsGoalDto } from './dto/create-savings-goal.dto';
 import { AddFundsDto } from './dto/add-funds.dto';
 import { UpdateSavingsGoalDto } from './dto/update-savings-goal.dto';
+import { money, Money } from '../common/money';
 
 @Injectable()
 export class SavingsGoalsService {
@@ -19,26 +20,16 @@ export class SavingsGoalsService {
     private readonly transactionsService: TransactionsService,
   ) {}
 
-  private mapWithProgress(goal: {
-    id: string;
-    userId: string;
-    name: string;
-    targetAmount: number;
-    savedAmount: number;
-    icon: string;
-    bgColor: string;
-    iconColor: string;
-    createdAt: Date;
-    updatedAt: Date;
-  }) {
+  private mapWithProgress<
+    T extends { targetAmount: Money; savedAmount: Money },
+  >(goal: T) {
+    const targetAmount = money(goal.targetAmount);
+    const savedAmount = money(goal.savedAmount);
     const progressPercent =
-      goal.targetAmount > 0
-        ? Math.min(
-            100,
-            Math.round((goal.savedAmount / goal.targetAmount) * 10000) / 100,
-          )
+      targetAmount > 0
+        ? Math.min(100, Math.round((savedAmount / targetAmount) * 10000) / 100)
         : 0;
-    return { ...goal, progressPercent };
+    return { ...goal, targetAmount, savedAmount, progressPercent };
   }
 
   async findAll(userId: string) {
@@ -81,7 +72,7 @@ export class SavingsGoalsService {
   async remove(userId: string, id: string) {
     const goal = await this.findOwned(userId, id);
     await this.prisma.savingsGoal.delete({ where: { id } });
-    return { id, returnedAmount: goal.savedAmount };
+    return { id, returnedAmount: money(goal.savedAmount) };
   }
 
   private async findOwned(userId: string, id: string) {
@@ -150,9 +141,10 @@ export class SavingsGoalsService {
    */
   async withdraw(userId: string, goalId: string, dto: AddFundsDto) {
     const goal = await this.findOwned(userId, goalId);
-    if (dto.amount > goal.savedAmount) {
+    const saved = money(goal.savedAmount);
+    if (dto.amount > saved) {
       throw new BadRequestException(
-        `Solo hay ${goal.savedAmount.toFixed(2)} ahorrados en esta meta`,
+        `Solo hay ${saved.toFixed(2)} ahorrados en esta meta`,
       );
     }
     const savingsCategory = await this.categoriesService.findSavingsCategory();

@@ -11,6 +11,7 @@ import { assertOwnPaymentMethod } from './payment-method-rules';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { FilterTransactionsDto } from './dto/filter-transactions.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
+import { money } from '../common/money';
 
 @Injectable()
 export class TransactionsService {
@@ -126,14 +127,13 @@ export class TransactionsService {
       }),
     ]);
 
-    const totalIncome = incomeAgg._sum.amount ?? 0;
-    const totalExpense = expenseAgg._sum.amount ?? 0;
-    const balance = totalIncome - totalExpense;
-
+    // Postgres sums the DECIMAL amounts exactly; cents from here on.
+    const totalIncome = money(incomeAgg._sum.amount);
+    const totalExpense = money(expenseAgg._sum.amount);
     return {
-      totalIncome: Math.round(totalIncome * 100) / 100,
-      totalExpense: Math.round(totalExpense * 100) / 100,
-      balance: Math.round(balance * 100) / 100,
+      totalIncome,
+      totalExpense,
+      balance: money(totalIncome - totalExpense),
     };
   }
 

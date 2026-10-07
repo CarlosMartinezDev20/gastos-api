@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PaymentMethod, PaymentMethodType } from '@prisma/client';
+import { money } from '../common/money';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCardPaymentDto } from './dto/create-card-payment.dto';
 import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
@@ -15,7 +16,11 @@ const CARD_TYPES: PaymentMethodType[] = [
   PaymentMethodType.DEBIT_CARD,
 ];
 
-type Fields = Omit<PaymentMethod, 'id' | 'userId' | 'createdAt' | 'updatedAt'>;
+// Amounts as numbers (cents); Prisma stores them as DECIMAL.
+type Fields = Omit<
+  PaymentMethod,
+  'id' | 'userId' | 'createdAt' | 'updatedAt' | 'creditLimit'
+> & { creditLimit: number | null };
 
 /**
  * Keeps only the fields that make sense for the type: brand and last
@@ -61,12 +66,12 @@ export class PaymentMethodsService {
       }),
     ]);
     const paidBy = new Map(
-      paid.map((p) => [p.paymentMethodId, p._sum.amount ?? 0]),
+      paid.map((p) => [p.paymentMethodId, money(p._sum.amount)]),
     );
     return methods.map(({ _count, ...method }) => ({
       ...method,
       transactionCount: _count.transactions,
-      paidTotal: Math.round((paidBy.get(method.id) ?? 0) * 100) / 100,
+      paidTotal: paidBy.get(method.id) ?? 0,
     }));
   }
 
@@ -146,7 +151,10 @@ export class PaymentMethodsService {
       brand: keep(dto.brand, current.brand),
       last4: keep(dto.last4, current.last4),
       bank: keep(dto.bank, current.bank),
-      creditLimit: keep(dto.creditLimit, current.creditLimit),
+      creditLimit: keep(
+        dto.creditLimit,
+        current.creditLimit === null ? null : money(current.creditLimit),
+      ),
       statementDay: keep(dto.statementDay, current.statementDay),
       dueDay: keep(dto.dueDay, current.dueDay),
     });

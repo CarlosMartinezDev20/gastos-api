@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { TransactionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SAVINGS_CATEGORY_NAME } from '../categories/categories.service';
+import { money } from '../common/money';
 
 @Injectable()
 export class MetricsService {
@@ -25,7 +26,7 @@ export class MetricsService {
       categoryId: e.categoryId,
       categoryName: categoryMap.get(e.categoryId)?.name ?? 'Desconocida',
       icon: categoryMap.get(e.categoryId)?.icon ?? 'help',
-      total: e._sum.amount ?? 0,
+      total: money(e._sum.amount),
     }));
 
     const grandTotal = items.reduce((sum, i) => sum + i.total, 0);
@@ -33,7 +34,6 @@ export class MetricsService {
     return items
       .map((item) => ({
         ...item,
-        total: Math.round(item.total * 100) / 100,
         percentage:
           grandTotal > 0
             ? Math.round((item.total / grandTotal) * 10000) / 100
@@ -61,16 +61,16 @@ export class MetricsService {
       }),
     ]);
 
-    const totalIncome = incomeAgg._sum.amount ?? 0;
-    const totalSaved = savingsExpenses._sum.amount ?? 0;
+    const totalIncome = money(incomeAgg._sum.amount);
+    const totalSaved = money(savingsExpenses._sum.amount);
     const efficiencyPercent =
       totalIncome > 0
         ? Math.round((totalSaved / totalIncome) * 10000) / 100
         : 0;
 
     return {
-      totalIncome: Math.round(totalIncome * 100) / 100,
-      totalSaved: Math.round(totalSaved * 100) / 100,
+      totalIncome,
+      totalSaved,
       efficiencyPercent,
     };
   }
