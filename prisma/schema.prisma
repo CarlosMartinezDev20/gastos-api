@@ -111,9 +111,9 @@ model Transaction {
 // A card or other way of paying, for the user's wallet. Never the card
 // number: only its last four digits, to tell cards apart.
 model PaymentMethod {
-  id           String            @id @default(uuid())
+  id           String                 @id @default(uuid())
   userId       String
-  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   name         String
   type         PaymentMethodType
   // Card-only fields (null for cash and digital wallets).
@@ -127,9 +127,10 @@ model PaymentMethod {
   creditLimit  Float?
   statementDay Int?
   dueDay       Int?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
   transactions Transaction[]
+  recurring    RecurringTransaction[]
 
   @@index([userId])
 }
@@ -154,22 +155,25 @@ model SavingsGoal {
 // A movement that repeats every week or month. Due occurrences are created as
 // transactions when the user's movements or balance are read.
 model RecurringTransaction {
-  id           String              @id @default(uuid())
-  userId       String
-  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  categoryId   String
-  category     Category            @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  title        String
-  amount       Float
-  type         TransactionType
-  frequency    RecurrenceFrequency
+  id              String              @id @default(uuid())
+  userId          String
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId      String
+  category        Category            @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  title           String
+  amount          Float
+  type            TransactionType
+  frequency       RecurrenceFrequency
   // Day of the month of the first occurrence, kept for short months.
-  anchorDay    Int
-  nextDate     DateTime
-  active       Boolean             @default(true)
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
-  transactions Transaction[]
+  anchorDay       Int
+  nextDate        DateTime
+  active          Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  transactions    Transaction[]
+  // Copied to the movements it creates; null if the method is deleted.
+  paymentMethodId String?
+  paymentMethod   PaymentMethod?      @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
 
   @@index([userId])
 }

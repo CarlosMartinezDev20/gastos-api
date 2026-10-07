@@ -37,6 +37,7 @@ describe('RecurringService.materialize', () => {
     anchorDay: 1,
     nextDate: new Date('2026-08-01T12:00:00Z'),
     active: true,
+    paymentMethodId: 'pm1',
   };
 
   function setup(claimed = 1) {
@@ -61,6 +62,17 @@ describe('RecurringService.materialize', () => {
       iso((call[0] as { data: { date: Date } }).data.date),
     );
     expect(dates).toEqual(['2026-08-01', '2026-09-01', '2026-10-01']);
+  });
+
+  it("pays each occurrence with the rule's payment method", async () => {
+    const { tx, service } = setup();
+    await service.materialize('u1', new Date('2026-08-02T00:00:00Z'));
+    expect(tx.transaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        recurringId: 'r1',
+        paymentMethodId: 'pm1',
+      }) as object,
+    });
   });
 
   it('skips occurrences another request already claimed', async () => {

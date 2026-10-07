@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { RecurrenceFrequency } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveMovementCategory } from '../transactions/category-rules';
+import { assertOwnPaymentMethod } from '../transactions/payment-method-rules';
 import { CreateRecurringDto } from './dto/create-recurring.dto';
 import { UpdateRecurringDto } from './dto/update-recurring.dto';
 
@@ -49,6 +50,7 @@ export class RecurringService {
       dto.categoryId,
       dto.type,
     );
+    await assertOwnPaymentMethod(this.prisma, userId, dto.paymentMethodId);
     const start = new Date(dto.startDate);
     return this.prisma.recurringTransaction.create({
       data: {
@@ -60,6 +62,7 @@ export class RecurringService {
         frequency: dto.frequency,
         anchorDay: start.getUTCDate(),
         nextDate: start,
+        paymentMethodId: dto.paymentMethodId ?? null,
       },
       include: { category: true },
     });
@@ -67,6 +70,7 @@ export class RecurringService {
 
   async update(userId: string, id: string, dto: UpdateRecurringDto) {
     const rule = await this.findOwn(userId, id);
+    await assertOwnPaymentMethod(this.prisma, userId, dto.paymentMethodId);
     // Resuming a paused rule continues from today, without back-filling
     // the time it was paused.
     let nextDate = rule.nextDate;
@@ -88,6 +92,8 @@ export class RecurringService {
         frequency: dto.frequency,
         active: dto.active,
         nextDate,
+        // undefined keeps it; null clears it.
+        paymentMethodId: dto.paymentMethodId,
       },
       include: { category: true },
     });
@@ -128,6 +134,7 @@ export class RecurringService {
               amount: rule.amount,
               type: rule.type,
               date: current,
+              paymentMethodId: rule.paymentMethodId,
             },
           });
           return true;

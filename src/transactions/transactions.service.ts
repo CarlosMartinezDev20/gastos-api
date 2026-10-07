@@ -7,6 +7,7 @@ import { Prisma, TransactionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RecurringService } from '../recurring/recurring.service';
 import { resolveMovementCategory } from './category-rules';
+import { assertOwnPaymentMethod } from './payment-method-rules';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { FilterTransactionsDto } from './dto/filter-transactions.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
@@ -39,7 +40,7 @@ export class TransactionsService {
 
   async create(userId: string, dto: CreateTransactionDto) {
     await this.resolveCategory(userId, dto.categoryId, dto.type);
-    await this.assertPaymentMethod(userId, dto.paymentMethodId);
+    await assertOwnPaymentMethod(this.prisma, userId, dto.paymentMethodId);
     return this.prisma.transaction.create({
       data: {
         userId,
@@ -62,7 +63,7 @@ export class TransactionsService {
     if (dto.categoryId || dto.type) {
       await this.resolveCategory(userId, categoryId, type);
     }
-    await this.assertPaymentMethod(userId, dto.paymentMethodId);
+    await assertOwnPaymentMethod(this.prisma, userId, dto.paymentMethodId);
     return this.prisma.transaction.update({
       where: { id },
       data: {
@@ -102,15 +103,6 @@ export class TransactionsService {
       );
     }
     return transaction;
-  }
-
-  /** A payment method, when given, must be one of the user's own. */
-  private async assertPaymentMethod(userId: string, id?: string | null) {
-    if (!id) return;
-    const method = await this.prisma.paymentMethod.findFirst({
-      where: { id, userId },
-    });
-    if (!method) throw new NotFoundException('Método de pago no encontrado');
   }
 
   private resolveCategory(

@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  IsUUID,
   MaxLength,
 } from 'class-validator';
 
@@ -34,4 +35,12 @@ export class UpdateRecurringDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @ApiPropertyOptional({
+    example: 'uuid-de-metodo-de-pago',
+    description: 'Con qué se paga; se copia a cada movimiento. null lo quita.',
+  })
+  @IsOptional()
+  @IsUUID()
+  paymentMethodId?: string | null;
 }

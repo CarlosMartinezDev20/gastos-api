@@ -1,10 +1,11 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { RecurrenceFrequency, TransactionType } from '@prisma/client';
 import {
   IsDateString,
   IsEnum,
   IsNotEmpty,
   IsNumber,
+  IsOptional,
   IsPositive,
   IsString,
   IsUUID,
@@ -41,4 +42,12 @@ export class CreateRecurringDto {
   })
   @IsDateString()
   startDate: string;
+
+  @ApiPropertyOptional({
+    example: 'uuid-de-metodo-de-pago',
+    description: 'Con qué se paga; se copia a cada movimiento. null lo quita.',
+  })
+  @IsOptional()
+  @IsUUID()
+  paymentMethodId?: string | null;
 }
