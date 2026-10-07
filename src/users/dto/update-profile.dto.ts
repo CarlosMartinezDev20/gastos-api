@@ -18,6 +18,7 @@ export class UpdateProfileDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   avatarUrl?: string;
 
   @ApiPropertyOptional({

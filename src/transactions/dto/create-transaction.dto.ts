@@ -16,6 +16,7 @@ export class CreateTransactionDto {
   @ApiProperty({ example: 'Almuerzo Facultad' })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(120)
   title: string;
 
   @ApiProperty({ example: 8.5 })

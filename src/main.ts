@@ -57,12 +57,19 @@ async function bootstrap() {
     .addTag('Metrics')
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  // The API map is for development; production doesn't advertise it.
+  const swagger = process.env.NODE_ENV !== 'production';
+  if (swagger) {
+    SwaggerModule.setup(
+      'api/docs',
+      app,
+      SwaggerModule.createDocument(app, config),
+    );
+  }
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
   console.log(`🚀 API en http://localhost:${port}`);
-  console.log(`📚 Swagger en http://localhost:${port}/api/docs`);
+  if (swagger) console.log(`📚 Swagger en http://localhost:${port}/api/docs`);
 }
 void bootstrap();
