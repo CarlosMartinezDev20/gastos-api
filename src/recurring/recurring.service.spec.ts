@@ -23,6 +23,21 @@ describe('nextOccurrence', () => {
     }
     expect(seen).toEqual(['2027-01-31', '2027-02-28', '2027-03-31']);
   });
+
+  it('adds a year, keeping Feb 29 for leap years', () => {
+    let date = new Date('2028-02-29T12:00:00Z');
+    const seen: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      date = nextOccurrence(date, RecurrenceFrequency.YEARLY, 29);
+      seen.push(iso(date));
+    }
+    expect(seen).toEqual([
+      '2029-02-28',
+      '2030-02-28',
+      '2031-02-28',
+      '2032-02-29',
+    ]);
+  });
 });
 
 describe('RecurringService.materialize', () => {

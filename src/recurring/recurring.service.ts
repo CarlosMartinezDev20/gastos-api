@@ -23,6 +23,15 @@ export function nextOccurrence(
     next.setUTCDate(next.getUTCDate() + 7);
     return next;
   }
+  if (frequency === RecurrenceFrequency.YEARLY) {
+    // Same month next year; Feb 29 falls back to Feb 28 off leap years.
+    const year = next.getUTCFullYear() + 1;
+    const month = next.getUTCMonth();
+    const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    next.setUTCDate(1);
+    next.setUTCFullYear(year, month, Math.min(anchorDay, lastDay));
+    return next;
+  }
   const year = next.getUTCFullYear();
   const month = next.getUTCMonth() + 1;
   const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
@@ -63,6 +72,7 @@ export class RecurringService {
         anchorDay: start.getUTCDate(),
         nextDate: start,
         paymentMethodId: dto.paymentMethodId ?? null,
+        service: dto.service ?? null,
       },
       include: { category: true },
     });
@@ -94,6 +104,7 @@ export class RecurringService {
         nextDate,
         // undefined keeps it; null clears it.
         paymentMethodId: dto.paymentMethodId,
+        service: dto.service,
       },
       include: { category: true },
     });

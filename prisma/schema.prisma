@@ -16,6 +16,7 @@ enum TransactionType {
 enum RecurrenceFrequency {
   WEEKLY
   MONTHLY
+  YEARLY
 }
 
 enum PaymentMethodType {
@@ -175,6 +176,9 @@ model RecurringTransaction {
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
   transactions    Transaction[]
+  // Catalog key of a subscription (chatgpt, spotify…); null for other
+  // recurring movements.
+  service         String?
   // Copied to the movements it creates; null if the method is deleted.
   paymentMethodId String?
   paymentMethod   PaymentMethod?      @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)

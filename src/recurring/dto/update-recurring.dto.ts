@@ -9,6 +9,7 @@ import {
   IsPositive,
   IsString,
   IsUUID,
+  Matches,
   MaxLength,
 } from 'class-validator';
 
@@ -43,4 +44,12 @@ export class UpdateRecurringDto {
   @IsOptional()
   @IsUUID()
   paymentMethodId?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'spotify',
+    description: 'Servicio del catálogo si es una suscripción. null lo quita.',
+  })
+  @IsOptional()
+  @Matches(/^[a-z0-9_]{1,40}$/)
+  service?: string | null;
 }
