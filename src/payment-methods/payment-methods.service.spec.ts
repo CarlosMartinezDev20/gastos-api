@@ -1,4 +1,8 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { CardBrand, PaymentMethodType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -32,6 +36,13 @@ function setup() {
       findFirst: jest.fn(),
       create: jest.fn((args: { data: object }) => args.data),
       update: jest.fn((args: { data: object }) => args.data),
+      delete: jest.fn(),
+    },
+    cardPayment: {
+      groupBy: jest.fn().mockResolvedValue([]),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      create: jest.fn((args: { data: object }) => args.data),
       delete: jest.fn(),
     },
   };
@@ -70,8 +81,15 @@ describe('PaymentMethodsService', () => {
     prisma.paymentMethod.findMany.mockResolvedValue([
       { ...visa, _count: { transactions: 3 } },
     ]);
+    prisma.cardPayment.groupBy.mockResolvedValue([
+      { paymentMethodId: 'pm1', _sum: { amount: 100.005 } },
+    ]);
     const [method] = await service.findAll('u1');
-    expect(method).toMatchObject({ id: 'pm1', transactionCount: 3 });
+    expect(method).toMatchObject({
+      id: 'pm1',
+      transactionCount: 3,
+      paidTotal: 100.01,
+    });
     expect(method).not.toHaveProperty('_count');
     expect(prisma.paymentMethod.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { userId: 'u1' } }),
@@ -134,5 +152,55 @@ describe('PaymentMethodsService', () => {
       NotFoundException,
     );
     expect(prisma.paymentMethod.delete).not.toHaveBeenCalled();
+  });
+
+  describe('card payments', () => {
+    const debit = { ...visa, id: 'pm2', type: PaymentMethodType.DEBIT_CARD };
+
+    it('records a payment to a credit card from another method', async () => {
+      const { prisma, service } = setup();
+      prisma.paymentMethod.findFirst
+        .mockResolvedValueOnce(visa)
+        .mockResolvedValueOnce(debit);
+      await service.addPayment('u1', 'pm1', {
+        amount: 120,
+        fromMethodId: 'pm2',
+      });
+      expect(prisma.cardPayment.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: 'u1',
+          paymentMethodId: 'pm1',
+          fromMethodId: 'pm2',
+          amount: 120,
+        }) as object,
+      });
+    });
+
+    it('only credit cards receive payments, not from another credit card', async () => {
+      const { prisma, service } = setup();
+      prisma.paymentMethod.findFirst.mockResolvedValueOnce(debit);
+      await expect(
+        service.addPayment('u1', 'pm2', { amount: 10 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      prisma.paymentMethod.findFirst
+        .mockResolvedValueOnce(visa)
+        .mockResolvedValueOnce({ ...visa, id: 'pm3' });
+      await expect(
+        service.addPayment('u1', 'pm1', { amount: 10, fromMethodId: 'pm3' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.cardPayment.create).not.toHaveBeenCalled();
+    });
+
+    it("can't delete another user's payment", async () => {
+      const { prisma, service } = setup();
+      prisma.cardPayment.findFirst.mockResolvedValue(null);
+      await expect(service.removePayment('u1', 'x')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(prisma.cardPayment.findFirst).toHaveBeenCalledWith({
+        where: { id: 'x', userId: 'u1' },
+      });
+    });
   });
 });

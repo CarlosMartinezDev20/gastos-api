@@ -1,10 +1,12 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PaymentMethod, PaymentMethodType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CreateCardPaymentDto } from './dto/create-card-payment.dto';
 import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
 import { UpdatePaymentMethodDto } from './dto/update-payment-method.dto';
 
@@ -43,16 +45,77 @@ export function normalizePaymentMethod(fields: Fields): Fields {
 export class PaymentMethodsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Each method with its movement count and, for credit cards, the total
+   * paid to it (what's owed = its expenses − that). */
   async findAll(userId: string) {
-    const methods = await this.prisma.paymentMethod.findMany({
-      where: { userId },
-      include: { _count: { select: { transactions: true } } },
-      orderBy: { createdAt: 'asc' },
-    });
+    const [methods, paid] = await Promise.all([
+      this.prisma.paymentMethod.findMany({
+        where: { userId },
+        include: { _count: { select: { transactions: true } } },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.cardPayment.groupBy({
+        by: ['paymentMethodId'],
+        where: { userId },
+        _sum: { amount: true },
+      }),
+    ]);
+    const paidBy = new Map(
+      paid.map((p) => [p.paymentMethodId, p._sum.amount ?? 0]),
+    );
     return methods.map(({ _count, ...method }) => ({
       ...method,
       transactionCount: _count.transactions,
+      paidTotal: Math.round((paidBy.get(method.id) ?? 0) * 100) / 100,
     }));
+  }
+
+  async listPayments(userId: string, methodId: string) {
+    await this.findOwn(userId, methodId);
+    return this.prisma.cardPayment.findMany({
+      where: { userId, paymentMethodId: methodId },
+      orderBy: { date: 'desc' },
+    });
+  }
+
+  /** A payment to a credit card: lowers what's owed, not the balance. */
+  async addPayment(
+    userId: string,
+    methodId: string,
+    dto: CreateCardPaymentDto,
+  ) {
+    const card = await this.findOwn(userId, methodId);
+    if (card.type !== PaymentMethodType.CREDIT_CARD) {
+      throw new BadRequestException(
+        'Solo las tarjetas de crédito reciben pagos',
+      );
+    }
+    if (dto.fromMethodId) {
+      const from = await this.findOwn(userId, dto.fromMethodId);
+      if (from.type === PaymentMethodType.CREDIT_CARD) {
+        throw new BadRequestException(
+          'Paga desde efectivo, débito o una billetera digital',
+        );
+      }
+    }
+    return this.prisma.cardPayment.create({
+      data: {
+        userId,
+        paymentMethodId: methodId,
+        fromMethodId: dto.fromMethodId ?? null,
+        amount: dto.amount,
+        date: dto.date ? new Date(dto.date) : undefined,
+      },
+    });
+  }
+
+  async removePayment(userId: string, paymentId: string) {
+    const payment = await this.prisma.cardPayment.findFirst({
+      where: { id: paymentId, userId },
+    });
+    if (!payment) throw new NotFoundException('Pago no encontrado');
+    await this.prisma.cardPayment.delete({ where: { id: paymentId } });
+    return { id: paymentId };
   }
 
   async create(userId: string, dto: CreatePaymentMethodDto) {

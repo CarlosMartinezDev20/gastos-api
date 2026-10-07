@@ -47,6 +47,7 @@ model User {
   budgets        Budget[]
   recurring      RecurringTransaction[]
   paymentMethods PaymentMethod[]
+  cardPayments   CardPayment[]
 }
 
 model Category {
@@ -131,6 +132,9 @@ model PaymentMethod {
   updatedAt    DateTime               @updatedAt
   transactions Transaction[]
   recurring    RecurringTransaction[]
+  // Payments to this credit card, and payments made from this method.
+  payments     CardPayment[]          @relation("CardPayments")
+  paidFrom     CardPayment[]          @relation("PaidFrom")
 
   @@index([userId])
 }
@@ -175,5 +179,24 @@ model RecurringTransaction {
   paymentMethodId String?
   paymentMethod   PaymentMethod?      @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
 
+  @@index([userId])
+}
+
+// A payment to a credit card. Not an expense: the purchases already were,
+// so it doesn't touch the balance; it lowers what is owed on the card.
+model CardPayment {
+  id              String         @id @default(uuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentMethodId String
+  paymentMethod   PaymentMethod  @relation("CardPayments", fields: [paymentMethodId], references: [id], onDelete: Cascade)
+  // Where the money came from (a debit card, cash…), if the user says.
+  fromMethodId    String?
+  fromMethod      PaymentMethod? @relation("PaidFrom", fields: [fromMethodId], references: [id], onDelete: SetNull)
+  amount          Float
+  date            DateTime       @default(now())
+  createdAt       DateTime       @default(now())
+
+  @@index([paymentMethodId])
   @@index([userId])
 }

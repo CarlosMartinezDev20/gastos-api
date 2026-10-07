@@ -20,6 +20,7 @@ import {
   CurrentUser,
   JwtPayloadUser,
 } from '../common/decorators/current-user.decorator';
+import { CreateCardPaymentDto } from './dto/create-card-payment.dto';
 import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
 import { UpdatePaymentMethodDto } from './dto/update-payment-method.dto';
 import { PaymentMethodsService } from './payment-methods.service';
@@ -58,6 +59,38 @@ export class PaymentMethodsController {
     @Body() dto: UpdatePaymentMethodDto,
   ) {
     return this.service.update(user.sub, id, dto);
+  }
+
+  @Get(':id/payments')
+  @ApiOperation({ summary: 'Pagos hechos a una tarjeta de crédito' })
+  listPayments(
+    @CurrentUser() user: JwtPayloadUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.service.listPayments(user.sub, id);
+  }
+
+  @Post(':id/payments')
+  @ApiOperation({
+    summary: 'Registrar un pago a la tarjeta (no es un gasto: baja la deuda)',
+  })
+  @ApiResponse({ status: 201, description: 'Pago registrado' })
+  @ApiResponse({ status: 400, description: 'No es una tarjeta de crédito' })
+  addPayment(
+    @CurrentUser() user: JwtPayloadUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateCardPaymentDto,
+  ) {
+    return this.service.addPayment(user.sub, id, dto);
+  }
+
+  @Delete('payments/:paymentId')
+  @ApiOperation({ summary: 'Borrar un pago registrado por error' })
+  removePayment(
+    @CurrentUser() user: JwtPayloadUser,
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+  ) {
+    return this.service.removePayment(user.sub, paymentId);
   }
 
   @Delete(':id')
