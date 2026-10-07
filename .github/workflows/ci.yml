@@ -1,0 +1,42 @@
+# Lint, unit tests, build and e2e tests against a throwaway Postgres.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gastos_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gastos_ci
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/gastos_ci
+      # Test-only secret (the API refuses to start with less than 32 chars).
+      JWT_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
+      CORS_ORIGIN: http://localhost:*
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      # Without --fix: CI must fail on lint errors, not rewrite files.
+      - run: npx eslint "{src,apps,libs,test}/**/*.ts"
+      - run: npm test
+      - run: npm run build
+      - run: npx prisma migrate deploy
+      - run: npx prisma db seed
+      - run: npm run test:e2e
