@@ -1,47 +1,12 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import helmet from 'helmet';
-import { DecimalToNumberInterceptor } from './common/decimal-to-number.interceptor';
 import { AppModule } from './app.module';
+import { configureApp } from './app.setup';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  app.use(helmet());
-
-  const corsOrigin = process.env.CORS_ORIGIN ?? '*';
-  const allowedOrigins = corsOrigin.split(',').map((o) => o.trim());
-  app.enableCors({
-    origin: (
-      origin: string | undefined,
-      callback: (err: Error | null, allow?: boolean) => void,
-    ) => {
-      if (!origin || corsOrigin === '*' || allowedOrigins.includes(origin)) {
-        callback(null, true);
-        return;
-      }
-
-      const isLocalWildcardAllowed = allowedOrigins.some((allowed) => {
-        if (!allowed.endsWith(':*')) return false;
-        const baseOrigin = allowed.slice(0, -2);
-        return origin.startsWith(`${baseOrigin}:`);
-      });
-
-      callback(null, isLocalWildcardAllowed);
-    },
-    credentials: true,
-  });
-
-  app.useGlobalInterceptors(new DecimalToNumberInterceptor());
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      transformOptions: { enableImplicitConversion: true },
-    }),
-  );
+  configureApp(app);
 
   const config = new DocumentBuilder()
     .setTitle('Gastos Universitarios API')
