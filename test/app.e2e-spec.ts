@@ -15,6 +15,12 @@ describe('API (e2e)', () => {
     await app.close();
   });
 
+  it('reports health without a token', () => {
+    return request(app.getHttpServer())
+      .get('/health')
+      .expect(200, { status: 'ok' });
+  });
+
   it('rejects protected routes without a token', () => {
     return request(app.getHttpServer()).get('/transactions').expect(401);
   });

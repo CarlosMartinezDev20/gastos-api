@@ -12,6 +12,7 @@ import { MetricsModule } from './metrics/metrics.module';
 import { BudgetsModule } from './budgets/budgets.module';
 import { RecurringModule } from './recurring/recurring.module';
 import { PaymentMethodsModule } from './payment-methods/payment-methods.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { PaymentMethodsModule } from './payment-methods/payment-methods.module';
     BudgetsModule,
     RecurringModule,
     PaymentMethodsModule,
+    HealthModule,
   ],
   providers: [
     {
