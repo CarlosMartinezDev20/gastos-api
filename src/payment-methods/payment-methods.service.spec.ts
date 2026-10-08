@@ -45,6 +45,7 @@ function setup() {
       create: jest.fn((args: { data: object }) => args.data),
       delete: jest.fn(),
     },
+    transaction: { groupBy: jest.fn().mockResolvedValue([]) },
   };
   const service = new PaymentMethodsService(prisma as unknown as PrismaService);
   return { prisma, service };
@@ -84,11 +85,17 @@ describe('PaymentMethodsService', () => {
     prisma.cardPayment.groupBy.mockResolvedValue([
       { paymentMethodId: 'pm1', _sum: { amount: 100.005 } },
     ]);
+    prisma.transaction.groupBy.mockResolvedValue([
+      { paymentMethodId: 'pm1', type: 'EXPENSE', _sum: { amount: 250.1 } },
+      { paymentMethodId: 'pm1', type: 'INCOME', _sum: { amount: 20 } },
+    ]);
     const [method] = await service.findAll('u1');
+    // Charged = purchases − refunds, all time.
     expect(method).toMatchObject({
       id: 'pm1',
       transactionCount: 3,
       paidTotal: 100.01,
+      chargedTotal: 230.1,
     });
     expect(method).not.toHaveProperty('_count');
     expect(prisma.paymentMethod.findMany).toHaveBeenCalledWith(

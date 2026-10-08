@@ -4,7 +4,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PaymentMethod, PaymentMethodType } from '@prisma/client';
+import {
+  PaymentMethod,
+  PaymentMethodType,
+  TransactionType,
+} from '@prisma/client';
 import { money } from '../common/money';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCardPaymentDto } from './dto/create-card-payment.dto';
@@ -50,10 +54,11 @@ export function normalizePaymentMethod(fields: Fields): Fields {
 export class PaymentMethodsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Each method with its movement count and, for credit cards, the total
-   * paid to it (what's owed = its expenses − that). */
+  /** Each method with its movement count and, for credit cards, what was
+   * charged to it (expenses − refunds, all time) and paid to it: what's
+   * owed = chargedTotal − paidTotal. */
   async findAll(userId: string) {
-    const [methods, paid] = await Promise.all([
+    const [methods, paid, charged] = await Promise.all([
       this.prisma.paymentMethod.findMany({
         where: { userId },
         include: { _count: { select: { transactions: true } } },
@@ -64,14 +69,27 @@ export class PaymentMethodsService {
         where: { userId },
         _sum: { amount: true },
       }),
+      this.prisma.transaction.groupBy({
+        by: ['paymentMethodId', 'type'],
+        where: { userId, paymentMethodId: { not: null } },
+        _sum: { amount: true },
+      }),
     ]);
     const paidBy = new Map(
       paid.map((p) => [p.paymentMethodId, money(p._sum.amount)]),
     );
+    const chargedBy = new Map<string, number>();
+    for (const row of charged) {
+      const id = row.paymentMethodId!;
+      const amount = money(row._sum.amount);
+      const signed = row.type === TransactionType.EXPENSE ? amount : -amount;
+      chargedBy.set(id, money((chargedBy.get(id) ?? 0) + signed));
+    }
     return methods.map(({ _count, ...method }) => ({
       ...method,
       transactionCount: _count.transactions,
       paidTotal: paidBy.get(method.id) ?? 0,
+      chargedTotal: chargedBy.get(method.id) ?? 0,
     }));
   }
 

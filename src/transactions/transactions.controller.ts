@@ -25,6 +25,7 @@ import {
 import { TransactionsService } from './transactions.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { FilterTransactionsDto } from './dto/filter-transactions.dto';
+import { TransactionPageDto } from './dto/transaction-page.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 
 @ApiTags('Transactions')
@@ -44,6 +45,22 @@ export class TransactionsController {
     @Query() filters: FilterTransactionsDto,
   ) {
     return this.transactionsService.findAll(user.sub, filters);
+  }
+
+  @Get('page')
+  @ApiOperation({
+    summary: 'Historial paginado (más recientes primero) con búsqueda',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      '{ items, nextCursor, summary } — summary (count, income, expense) solo en la primera página',
+  })
+  findPage(
+    @CurrentUser() user: JwtPayloadUser,
+    @Query() query: TransactionPageDto,
+  ) {
+    return this.transactionsService.findPage(user.sub, query);
   }
 
   @Get('balance')

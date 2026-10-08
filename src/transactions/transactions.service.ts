@@ -12,6 +12,20 @@ import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { FilterTransactionsDto } from './dto/filter-transactions.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { money } from '../common/money';
+import { TransactionPageDto } from './dto/transaction-page.dto';
+import {
+  SEARCH_FROM,
+  SEARCH_TO,
+  decodeCursor,
+  encodeCursor,
+  likePattern,
+  normalizeSearch,
+} from './page-cursor';
+
+/** `date` is a timestamp without zone holding UTC; compare in UTC whatever
+ * the session's time zone is. */
+const utc = (date: Date | string) =>
+  Prisma.sql`(${new Date(date).toISOString()}::timestamptz AT TIME ZONE 'UTC')`;
 
 @Injectable()
 export class TransactionsService {
@@ -37,6 +51,70 @@ export class TransactionsService {
       include: { category: true },
       orderBy: { date: 'desc' },
     });
+  }
+
+  /**
+   * One page of the history, newest first, with the filters of the app's
+   * Historial. The first page (no cursor) also brings the totals of
+   * everything that matches, since the app no longer has every movement.
+   */
+  async findPage(userId: string, query: TransactionPageDto) {
+    await this.recurring.materialize(userId);
+    const limit = query.limit ?? 50;
+    const where: Prisma.Sql[] = [Prisma.sql`t."userId" = ${userId}`];
+    if (query.type) {
+      where.push(Prisma.sql`t."type" = ${query.type}::"TransactionType"`);
+    }
+    if (query.categoryId) {
+      where.push(Prisma.sql`t."categoryId" = ${query.categoryId}`);
+    }
+    if (query.from) where.push(Prisma.sql`t."date" >= ${utc(query.from)}`);
+    if (query.to) where.push(Prisma.sql`t."date" <= ${utc(query.to)}`);
+    const search = normalizeSearch(query.q ?? '');
+    if (search) {
+      where.push(
+        Prisma.sql`translate(lower(t."title" || ' ' || c."name"), ${SEARCH_FROM}, ${SEARCH_TO}) LIKE ${likePattern(search)} ESCAPE '\\'`,
+      );
+    }
+    const filters = Prisma.join(where, ' AND ');
+    const from = Prisma.sql`FROM "Transaction" t JOIN "Category" c ON c."id" = t."categoryId"`;
+
+    const after = query.cursor ? decodeCursor(query.cursor) : null;
+    const pageWhere = after
+      ? Prisma.sql`${filters} AND (t."date", t."id") < (${utc(after.date)}, ${after.id})`
+      : filters;
+    const [rows, summary] = await Promise.all([
+      this.prisma.$queryRaw<{ id: string }[]>`
+        SELECT t."id" ${from} WHERE ${pageWhere}
+        ORDER BY t."date" DESC, t."id" DESC LIMIT ${limit + 1}`,
+      after
+        ? null
+        : this.prisma.$queryRaw<
+            { count: number; income: Prisma.Decimal; expense: Prisma.Decimal }[]
+          >`
+            SELECT COUNT(*)::int AS "count",
+              COALESCE(SUM(t."amount") FILTER (WHERE t."type" = 'INCOME'), 0) AS "income",
+              COALESCE(SUM(t."amount") FILTER (WHERE t."type" = 'EXPENSE'), 0) AS "expense"
+            ${from} WHERE ${filters}`,
+    ]);
+
+    const ids = rows.slice(0, limit).map((r) => r.id);
+    const found = await this.prisma.transaction.findMany({
+      where: { id: { in: ids } },
+      include: { category: true },
+    });
+    const byId = new Map(found.map((t) => [t.id, t]));
+    const items = ids.flatMap((id) => byId.get(id) ?? []);
+    const last = items.at(-1);
+    return {
+      items,
+      nextCursor: rows.length > limit && last ? encodeCursor(last) : null,
+      summary: summary && {
+        count: summary[0].count,
+        income: money(summary[0].income),
+        expense: money(summary[0].expense),
+      },
+    };
   }
 
   async create(userId: string, dto: CreateTransactionDto) {
