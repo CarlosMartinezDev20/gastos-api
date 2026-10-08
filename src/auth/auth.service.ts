@@ -42,7 +42,7 @@ export class AuthService {
       },
     });
 
-    const accessToken = this.signToken(user.id, user.email);
+    const accessToken = this.signToken(user);
     return { user, accessToken };
   }
 
@@ -59,7 +59,7 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    const accessToken = this.signToken(user.id, user.email);
+    const accessToken = this.signToken(user);
     return {
       user: {
         id: user.id,
@@ -73,7 +73,12 @@ export class AuthService {
     };
   }
 
-  private signToken(userId: string, email: string): string {
-    return this.jwtService.sign({ sub: userId, email });
+  /** A token for [user]; `ver` ties it to the current password. */
+  signToken(user: { id: string; email: string; tokenVersion?: number }) {
+    return this.jwtService.sign({
+      sub: user.id,
+      email: user.email,
+      ver: user.tokenVersion ?? 0,
+    });
   }
 }
