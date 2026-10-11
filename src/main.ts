@@ -1,11 +1,17 @@
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { configureApp } from './app.setup';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Behind Render's proxy: take the client's IP from the X-Forwarded-For
+  // entry that proxy adds (one hop), so each client gets its own rate limit
+  // instead of all sharing the proxy's address. One hop only: a client
+  // can't pick its IP by sending the header itself.
+  app.set('trust proxy', 1);
   // Render stops instances with SIGTERM: close the database pool cleanly.
   app.enableShutdownHooks();
 
