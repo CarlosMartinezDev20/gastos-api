@@ -22,10 +22,10 @@ import {
   normalizeSearch,
 } from './page-cursor';
 
-/** `date` is a timestamp without zone holding UTC; compare in UTC whatever
- * the session's time zone is. */
+/** An instant for raw SQL: `date` is timestamptz, so an explicit ISO
+ * timestamp compares exactly whatever the session's time zone is. */
 const utc = (date: Date | string) =>
-  Prisma.sql`(${new Date(date).toISOString()}::timestamptz AT TIME ZONE 'UTC')`;
+  Prisma.sql`(${new Date(date).toISOString()}::timestamptz)`;
 
 @Injectable()
 export class TransactionsService {

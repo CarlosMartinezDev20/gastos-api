@@ -3,10 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
-import { AuthService } from '../auth/auth.service';
+import { SupabaseAuthClient } from '../auth/supabase-auth.client';
 import { PrismaService } from '../prisma/prisma.service';
-import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
 const profileSelect = {
@@ -23,7 +21,7 @@ const profileSelect = {
 export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly auth: AuthService,
+    private readonly auth: SupabaseAuthClient,
   ) {}
 
   async getProfile(userId: string) {
@@ -46,51 +44,21 @@ export class UsersService {
   }
 
   /**
-   * Changes the password and bumps `tokenVersion`, which signs out every
-   * other device; returns a fresh token for this one.
-   */
-  async changePassword(userId: string, dto: ChangePasswordDto) {
-    await this.checkPassword(userId, dto.currentPassword);
-    if (dto.currentPassword === dto.newPassword) {
-      throw new BadRequestException(
-        'La nueva contraseña debe ser distinta de la actual',
-      );
-    }
-    const user = await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        password: await bcrypt.hash(dto.newPassword, 10),
-        tokenVersion: { increment: 1 },
-      },
-      select: { id: true, email: true, tokenVersion: true },
-    });
-    return { accessToken: this.auth.signToken(user) };
-  }
-
-  /**
    * Deletes the account and, by cascade, everything in it. The user's
    * movements go first: they reference the user's own categories, which
-   * the same cascade removes.
+   * the same cascade removes. Then the Supabase account: if that step
+   * fails, the user can still sign in to an empty account and retry.
    */
   async deleteAccount(userId: string, password: string) {
-    await this.checkPassword(userId, password);
+    const { email } = await this.getProfile(userId);
+    // 400, not 401: a 401 would sign the app out on a typo.
+    if (!(await this.auth.checkPassword(email, password))) {
+      throw new BadRequestException('La contraseña actual no es correcta');
+    }
     await this.prisma.$transaction([
       this.prisma.transaction.deleteMany({ where: { userId } }),
       this.prisma.user.delete({ where: { id: userId } }),
     ]);
-  }
-
-  // 400, not 401: a 401 would sign the app out on a typo.
-  private async checkPassword(userId: string, password: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { password: true },
-    });
-    if (!user) {
-      throw new NotFoundException('Usuario no encontrado');
-    }
-    if (!(await bcrypt.compare(password, user.password))) {
-      throw new BadRequestException('La contraseña actual no es correcta');
-    }
+    await this.auth.deleteUser(userId);
   }
 }

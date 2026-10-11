@@ -13,10 +13,11 @@ import { BudgetsModule } from './budgets/budgets.module';
 import { RecurringModule } from './recurring/recurring.module';
 import { PaymentMethodsModule } from './payment-methods/payment-methods.module';
 import { HealthModule } from './health/health.module';
+import { validateEnv } from './config/env';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ThrottlerModule.forRoot([
       {
         name: 'default',

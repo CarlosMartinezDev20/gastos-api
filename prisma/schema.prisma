@@ -33,17 +33,16 @@ enum CardBrand {
   OTHER
 }
 
+// The profile of a Supabase Auth account: `id` is the Supabase user id
+// (auth.users.id, the token's `sub`). Sign-in and passwords live in Supabase.
 model User {
   id             String                 @id @default(uuid())
   name           String
   email          String                 @unique
-  password       String
   avatarUrl      String?
   darkMode       Boolean                @default(false)
-  // Goes up when the password changes: tokens signed with an older one stop working.
-  tokenVersion   Int                    @default(0)
-  createdAt      DateTime               @default(now())
-  updatedAt      DateTime               @updatedAt
+  createdAt      DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime               @updatedAt @db.Timestamptz(3)
   categories     Category[]
   transactions   Transaction[]
   savingsGoals   SavingsGoal[]
@@ -76,11 +75,12 @@ model Budget {
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   amount     Decimal  @db.Decimal(12, 2)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
 
   @@unique([userId, categoryId])
   @@index([userId])
+  @@index([categoryId])
 }
 
 model Transaction {
@@ -92,7 +92,7 @@ model Transaction {
   title           String
   amount          Decimal               @db.Decimal(12, 2)
   type            TransactionType
-  date            DateTime              @default(now())
+  date            DateTime              @default(now()) @db.Timestamptz(3)
   // Set on goal contributions; deleting the goal deletes them and returns the money to the balance.
   goalId          String?
   goal            SavingsGoal?          @relation(fields: [goalId], references: [id], onDelete: Cascade)
@@ -110,6 +110,7 @@ model Transaction {
   @@index([categoryId])
   @@index([goalId])
   @@index([paymentMethodId])
+  @@index([recurringId])
 }
 
 // A card or other way of paying, for the user's wallet. Never the card
@@ -131,8 +132,8 @@ model PaymentMethod {
   creditLimit  Decimal?               @db.Decimal(12, 2)
   statementDay Int?
   dueDay       Int?
-  createdAt    DateTime               @default(now())
-  updatedAt    DateTime               @updatedAt
+  createdAt    DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime               @updatedAt @db.Timestamptz(3)
   transactions Transaction[]
   recurring    RecurringTransaction[]
   // Payments to this credit card, and payments made from this method.
@@ -152,8 +153,8 @@ model SavingsGoal {
   icon          String
   bgColor       String
   iconColor     String
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  createdAt     DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime      @updatedAt @db.Timestamptz(3)
   contributions Transaction[]
 
   @@index([userId])
@@ -173,10 +174,10 @@ model RecurringTransaction {
   frequency       RecurrenceFrequency
   // Day of the month of the first occurrence, kept for short months.
   anchorDay       Int
-  nextDate        DateTime
+  nextDate        DateTime            @db.Timestamptz(3)
   active          Boolean             @default(true)
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  createdAt       DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime            @updatedAt @db.Timestamptz(3)
   transactions    Transaction[]
   // Catalog key of a subscription (chatgpt, spotify…); null for other
   // recurring movements.
@@ -186,6 +187,8 @@ model RecurringTransaction {
   paymentMethod   PaymentMethod?      @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
 
   @@index([userId])
+  @@index([categoryId])
+  @@index([paymentMethodId])
 }
 
 // A payment to a credit card. Not an expense: the purchases already were,
@@ -200,9 +203,10 @@ model CardPayment {
   fromMethodId    String?
   fromMethod      PaymentMethod? @relation("PaidFrom", fields: [fromMethodId], references: [id], onDelete: SetNull)
   amount          Decimal        @db.Decimal(12, 2)
-  date            DateTime       @default(now())
-  createdAt       DateTime       @default(now())
+  date            DateTime       @default(now()) @db.Timestamptz(3)
+  createdAt       DateTime       @default(now()) @db.Timestamptz(3)
 
   @@index([paymentMethodId])
   @@index([userId])
+  @@index([fromMethodId])
 }

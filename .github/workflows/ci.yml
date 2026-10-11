@@ -22,8 +22,8 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gastos_ci
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/gastos_ci
-      # Test-only secret (the API refuses to start with less than 32 chars).
-      JWT_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
+      # The e2e tests sign their own tokens and fake the Supabase Auth calls.
+      SUPABASE_URL: https://ci.supabase.co
       CORS_ORIGIN: http://localhost:*
     steps:
       - uses: actions/checkout@v4

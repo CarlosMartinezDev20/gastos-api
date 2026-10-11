@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
@@ -5,6 +6,8 @@ import { configureApp } from './app.setup';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // Render stops instances with SIGTERM: close the database pool cleanly.
+  app.enableShutdownHooks();
 
   configureApp(app);
 
@@ -34,9 +37,11 @@ async function bootstrap() {
     );
   }
 
-  const port = process.env.PORT ?? 3000;
-  await app.listen(port);
-  console.log(`🚀 API en http://localhost:${port}`);
-  if (swagger) console.log(`📚 Swagger en http://localhost:${port}/api/docs`);
+  // 0.0.0.0: reachable from the host's proxy (Render), not only loopback.
+  const port = Number(process.env.PORT ?? 3000);
+  await app.listen(port, '0.0.0.0');
+  const logger = new Logger('Bootstrap');
+  logger.log(`API escuchando en el puerto ${port}`);
+  if (swagger) logger.log(`Swagger en http://localhost:${port}/api/docs`);
 }
 void bootstrap();

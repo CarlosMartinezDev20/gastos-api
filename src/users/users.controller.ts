@@ -20,7 +20,6 @@ import {
   JwtPayloadUser,
 } from '../common/decorators/current-user.decorator';
 import { UsersService } from './users.service';
-import { ChangePasswordDto } from './dto/change-password.dto';
 import { DeleteAccountDto } from './dto/delete-account.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
@@ -46,20 +45,6 @@ export class UsersController {
     @Body() dto: UpdateProfileDto,
   ) {
     return this.usersService.updateProfile(user.sub, dto);
-  }
-
-  @Patch('password')
-  @Throttle({ default: { limit: 5, ttl: 300000 } })
-  @ApiOperation({
-    summary: 'Cambiar contraseña (cierra la sesión en otros dispositivos)',
-  })
-  @ApiResponse({ status: 200, description: 'Nuevo token para este equipo' })
-  @ApiResponse({ status: 400, description: 'Contraseña actual incorrecta' })
-  changePassword(
-    @CurrentUser() user: JwtPayloadUser,
-    @Body() dto: ChangePasswordDto,
-  ) {
-    return this.usersService.changePassword(user.sub, dto);
   }
 
   @Delete('profile')

@@ -1,85 +1,71 @@
 # Gastos Universitarios API
 
-API REST en **NestJS** + **Prisma** + **Supabase** (PostgreSQL) para finanzas personales universitarias.
+API REST en **NestJS** + **Prisma** sobre **Supabase** (PostgreSQL + Auth), desplegada en **Render**.
 
-## 1. Proyecto en Supabase
-
-1. Crea un proyecto en [supabase.com](https://supabase.com).
-2. Ve a **Project Settings → Database → Connection string**.
-3. Copia:
-   - **Transaction pooler** (puerto `6543`) → `DATABASE_URL` (+ `?pgbouncer=true`)
-   - **Session pooler** (puerto `5432`) → `DIRECT_URL` (migraciones y seed)
-
-> También funciona con PostgreSQL local: usa la misma URL en ambas, p. ej. `postgresql://postgres:postgres@localhost:5432/gastos_db`.
-
-> Si `db.[ref].supabase.co` (Direct) da error **P1001 / red inaccesible**, usa **Session pooler** en `DIRECT_URL` (misma región que el transaction pooler). Es habitual en redes solo IPv4.
-
-## 2. Variables de entorno
-
-```bash
-cp .env.example .env
-# Edita .env con tus URLs y contraseña de Supabase
+```
+Flutter ──(email/contraseña)──▶ Supabase Auth
+   │                                │ access token (JWT ES256)
+   └──── Authorization: Bearer ────▶ NestJS (Render) ──Prisma──▶ Supabase Postgres
 ```
 
-## 3. Instalación y base de datos
+- **Cuentas:** Supabase Auth (registro, inicio de sesión, cambio de contraseña desde la app). La API verifica cada token con las claves públicas del proyecto (JWKS: firma, emisor, audiencia `authenticated`, expiración) y no guarda contraseñas. La fila `User` es el perfil: su `id` es el id de Supabase (`sub`) y se crea en la primera llamada de una cuenta nueva.
+- **Datos:** la app solo los lee y escribe a través de la API, que filtra cada consulta por el usuario del token. El esquema `public` no se expone en el Data API de Supabase y todas las tablas tienen RLS activado sin políticas, sin privilegios para `anon`/`authenticated`.
+
+## Decisiones de infraestructura
+
+- **Una sola fuente de verdad del esquema: las migraciones de Prisma** (`prisma/migrations`). `supabase/` solo guarda la configuración del proyecto (`config.toml`: Auth, Data API), que se aplica con `supabase config push`; no hay migraciones en `supabase/migrations`. Toda tabla nueva debe activar RLS en su migración.
+- **Conexión:** Supavisor en **modo sesión** (puerto 5432) para `DATABASE_URL` y `DIRECT_URL`. Render solo sale por IPv4 y el host directo `db.<ref>.supabase.co` es solo IPv6 en el plan gratuito; el modo sesión admite las sentencias preparadas de Prisma y encaja con un servidor persistente (el modo transacción, 6543, es para serverless). `connection_limit=5` deja margen en el pool del plan gratuito.
+- **Migraciones en Render:** el build ejecuta `prisma migrate deploy` (el pre-deploy command no existe en el plan gratuito).
+- **Confirmación de correo desactivada** en Supabase Auth: el SMTP integrado del plan gratuito solo envía a miembros del equipo. Al configurar un SMTP propio se puede activar en `supabase/config.toml` (`[auth.email] enable_confirmations`).
+
+## Desarrollo local
 
 ```bash
 npm install
-npm run db:setup    # migrate + seed
+cp .env.example .env   # PostgreSQL local o Supabase; SUPABASE_URL del proyecto
+npm run db:setup       # migrate + seed (categorías del sistema)
 npm run start:dev
 ```
 
-- API: `http://localhost:3001` (puerto de `PORT`; es el que usa la app por defecto)
-- Swagger: `http://localhost:3001/api/docs`
-
-Para borrar los datos y volver a crear todo desde cero (solo desarrollo):
-
-```bash
-npx prisma migrate reset --force   # aplica migraciones + seed
-```
-
-### Tests
+- API: `http://localhost:3001`; Swagger: `http://localhost:3001/api/docs` (no en producción).
+- Para iniciar sesión hace falta una cuenta de Supabase Auth del proyecto de `SUPABASE_URL` (regístrate desde la app).
+- Usuarios demo (crean cuentas reales en Supabase Auth, solo fuera de producción): `SEED_DEMO_USERS=true` y `SUPABASE_SECRET_KEY` en `.env`, y `npx prisma db seed`. Crea `daniela@universidad.edu` / `daniela123`, `carlos@universidad.edu` / `carlos123` y `nuevo@universidad.edu` / `nuevo123`.
 
 ```bash
 npm test            # unitarios
-npm run test:e2e    # necesita la base de datos con el seed
+npm run test:e2e    # base de datos con migraciones y seed; firman sus propios tokens
+npx prisma migrate reset --force   # solo desarrollo: borra y recrea todo
 ```
 
-### Solo migraciones (CI / producción)
+## Producción (Render)
 
-```bash
-npx prisma migrate deploy
-npx prisma db seed
-```
+| | |
+|---|---|
+| Build | `npm ci --include=dev && npx prisma generate && npx prisma migrate deploy && npm run build` |
+| Start | `npm run start:prod` |
+| Health check | `GET /health` (sin base de datos); `GET /health/db` comprueba la conexión |
+| Variables | `NODE_ENV=production`, `DATABASE_URL`, `DIRECT_URL`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `CORS_ORIGIN` |
 
-## Usuarios de prueba (seed)
-
-| Email                     | Contraseña   | Datos                                  |
-|---------------------------|--------------|----------------------------------------|
-| `daniela@universidad.edu` | `daniela123` | Movimientos de 6 semanas y 3 metas (una cumplida) |
-| `carlos@universidad.edu`  | `carlos123`  | Pocos movimientos, 1 meta, tema oscuro |
-| `nuevo@universidad.edu`   | `nuevo123`   | Cuenta vacía (primer uso)              |
-
-El seed solo rellena cuentas sin datos, así que volver a ejecutarlo no borra lo que hayas creado.
+La API valida las variables al arrancar y se detiene con un mensaje claro si falta alguna. Los secretos solo viven en las variables de entorno de Render y en `.env` local (ignorado por git).
 
 ## Seguridad
 
-- Rate limiting: 100 req / 15 min (global); 5 req / 5 min en auth
-- Helmet, CORS, JWT, bcrypt, ValidationPipe global
+- Rate limiting: 100 req / 15 min (global); 5 req / 5 min al eliminar la cuenta.
+- Helmet, CORS por lista (`CORS_ORIGIN`), ValidationPipe global (`whitelist` + `forbidNonWhitelisted`).
+- Tokens de Supabase verificados con JWKS; ningún secreto de firma en la API. La clave secreta de Supabase solo se usa en el servidor (eliminar cuentas).
 
 ## Endpoints
 
 | Módulo        | Rutas |
 |---------------|-------|
-| Auth          | `POST /auth/register`, `POST /auth/login` |
-| Users         | `GET/PATCH /users/profile` |
-| Categories    | `GET/POST /categories` |
-| Transactions  | `GET/POST /transactions`, `PATCH/DELETE /transactions/:id`, `GET /transactions/balance` |
-| Savings Goals | `GET/POST /savings-goals`, `PATCH/DELETE /savings-goals/:id`, `POST /savings-goals/:id/add-funds` |
-
-Los aportes a metas se guardan como gastos de la categoría reservada **Ahorro**, vinculados a la meta (`goalId`). No se pueden editar ni borrar como movimientos sueltos; al eliminar la meta se eliminan y el dinero vuelve al balance.
+| Health        | `GET /health`, `GET /health/db` |
+| Users         | `GET/PATCH/DELETE /users/profile` |
+| Categories    | `GET/POST /categories`, `PATCH/DELETE /categories/:id` |
+| Transactions  | `GET/POST /transactions`, `GET /transactions/page`, `PATCH/DELETE /transactions/:id`, `GET /transactions/balance` |
+| Savings Goals | `GET/POST /savings-goals`, `PATCH/DELETE /savings-goals/:id`, `POST /savings-goals/:id/add-funds`, `POST /savings-goals/:id/withdraw` |
+| Budgets       | `GET /budgets`, `PUT/DELETE /budgets/:categoryId` |
+| Recurring     | `GET/POST /recurring`, `PATCH/DELETE /recurring/:id` |
+| Wallet        | `GET/POST /payment-methods`, `PATCH/DELETE /payment-methods/:id`, pagos de tarjeta |
 | Metrics       | `GET /metrics/category-expenses`, `GET /metrics/savings-efficiency` |
 
-## Supabase Dashboard
-
-Tras el seed puedes revisar tablas en **Table Editor**: `User`, `Category`, `Transaction`, `SavingsGoal`.
+Los aportes a metas se guardan como gastos de la categoría reservada **Ahorro**, vinculados a la meta (`goalId`). No se pueden editar ni borrar como movimientos sueltos; al eliminar la meta se eliminan y el dinero vuelve al balance.

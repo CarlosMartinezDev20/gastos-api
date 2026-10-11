@@ -3,82 +3,75 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
+import { Prisma } from '@prisma/client';
+import { JwtPayloadUser } from '../common/decorators/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
+import { SupabaseAuthClient } from './supabase-auth.client';
+import {
+  InvalidTokenError,
+  SupabaseIdentity,
+  SupabaseJwtVerifier,
+} from './supabase-jwt.verifier';
 
+/**
+ * Turns a Supabase access token into the API's user. Accounts live in
+ * Supabase Auth; the `User` row (same id) holds the profile and owns the
+ * data, and is created the first time a new account calls the API.
+ */
 @Injectable()
 export class AuthService {
   constructor(
+    private readonly verifier: SupabaseJwtVerifier,
     private readonly prisma: PrismaService,
-    private readonly jwtService: JwtService,
+    private readonly supabase: SupabaseAuthClient,
   ) {}
 
-  async register(dto: RegisterDto) {
-    const existing = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-    });
-    if (existing) {
-      throw new ConflictException('El correo ya está registrado');
+  async authenticate(token: string): Promise<JwtPayloadUser> {
+    let identity: SupabaseIdentity;
+    try {
+      identity = await this.verifier.verify(token);
+    } catch (error) {
+      if (error instanceof InvalidTokenError) {
+        throw new UnauthorizedException(
+          'Tu sesión expiró, inicia sesión de nuevo',
+        );
+      }
+      throw error;
     }
-
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
-    const user = await this.prisma.user.create({
-      data: {
-        name: dto.name,
-        email: dto.email,
-        password: hashedPassword,
-        avatarUrl: dto.avatarUrl,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        avatarUrl: true,
-        darkMode: true,
-        createdAt: true,
-      },
-    });
-
-    const accessToken = this.signToken(user);
-    return { user, accessToken };
+    await this.ensureProfile(identity);
+    return { sub: identity.sub, email: identity.email };
   }
 
-  async login(dto: LoginDto) {
+  private async ensureProfile({ sub, email, name }: SupabaseIdentity) {
     const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
+      where: { id: sub },
+      select: { email: true },
     });
-    if (!user) {
-      throw new UnauthorizedException('Credenciales inválidas');
+    // A new profile only for a live account: not for the still-valid token
+    // of an account that was just deleted.
+    if (!user && !(await this.supabase.userExists(sub))) {
+      throw new UnauthorizedException('Esta cuenta ya no existe');
     }
-
-    const valid = await bcrypt.compare(dto.password, user.password);
-    if (!valid) {
-      throw new UnauthorizedException('Credenciales inválidas');
+    try {
+      if (!user) {
+        await this.prisma.user.create({
+          data: { id: sub, email, name: name ?? email.split('@')[0] },
+        });
+      } else if (user.email !== email) {
+        // The email was changed in Supabase Auth.
+        await this.prisma.user.update({ where: { id: sub }, data: { email } });
+      }
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        // Two first requests at once: the other one created it.
+        if (await this.prisma.user.findUnique({ where: { id: sub } })) return;
+        // Another profile (a deleted Supabase account) still has the email.
+        throw new ConflictException('El correo ya está registrado');
+      }
+      throw error;
     }
-
-    const accessToken = this.signToken(user);
-    return {
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        avatarUrl: user.avatarUrl,
-        darkMode: user.darkMode,
-        createdAt: user.createdAt,
-      },
-      accessToken,
-    };
-  }
-
-  /** A token for [user]; `ver` ties it to the current password. */
-  signToken(user: { id: string; email: string; tokenVersion?: number }) {
-    return this.jwtService.sign({
-      sub: user.id,
-      email: user.email,
-      ver: user.tokenVersion ?? 0,
-    });
   }
 }

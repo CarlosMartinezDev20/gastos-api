@@ -1,5 +1,4 @@
 import { PrismaClient, TransactionType } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
@@ -192,13 +191,18 @@ async function seedUser(
   seed: SeedUser,
   categories: Awaited<ReturnType<typeof seedCategories>>,
 ) {
+  const id = await supabaseUserId(seed);
+  const other = await prisma.user.findUnique({ where: { email: seed.email } });
+  if (other && other.id !== id) {
+    return 'omitido: otro perfil tiene ese correo (npx prisma migrate reset)';
+  }
   const user = await prisma.user.upsert({
-    where: { email: seed.email },
+    where: { id },
     update: {},
     create: {
+      id,
       name: seed.name,
       email: seed.email,
-      password: await bcrypt.hash(seed.password, 10),
       darkMode: seed.darkMode ?? false,
     },
   });
@@ -253,12 +257,62 @@ async function seedUser(
   return 'creado';
 }
 
+/**
+ * The Supabase Auth id of a demo account, creating it (already confirmed)
+ * if needed. Uses the admin API, so it needs the secret key.
+ */
+async function supabaseUserId(seed: SeedUser): Promise<string> {
+  const url = `${process.env.SUPABASE_URL}/auth/v1/admin/users`;
+  const headers = {
+    apikey: process.env.SUPABASE_SECRET_KEY!,
+    'Content-Type': 'application/json',
+  };
+  const created = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      email: seed.email,
+      password: seed.password,
+      email_confirm: true,
+      user_metadata: { name: seed.name },
+    }),
+  });
+  if (created.ok) return ((await created.json()) as { id: string }).id;
+  if (created.status !== 422) {
+    throw new Error(`Supabase Auth respondió ${created.status}`);
+  }
+  // Already registered: find it.
+  const list = await fetch(`${url}?per_page=1000`, { headers });
+  const { users } = (await list.json()) as {
+    users: { id: string; email: string }[];
+  };
+  const user = users.find((u) => u.email === seed.email);
+  if (!user) throw new Error(`No se encontró ${seed.email} en Supabase Auth`);
+  return user.id;
+}
+
+/**
+ * The system categories always (every environment needs them). Demo
+ * accounts only on request (SEED_DEMO_USERS=true), never in production:
+ * they are real Supabase Auth users with known passwords.
+ */
 async function main() {
   console.log('🌱 Iniciando seed...');
   const categories = await seedCategories();
-  for (const user of USERS) {
-    const result = await seedUser(user, categories);
-    console.log(`   ${user.email} / ${user.password} (${result})`);
+  console.log(`   ${categories.size} categorías del sistema`);
+  if (process.env.SEED_DEMO_USERS !== 'true') {
+    console.log('   Sin usuarios demo (SEED_DEMO_USERS=true para crearlos).');
+  } else if (process.env.NODE_ENV === 'production') {
+    throw new Error('No se crean usuarios demo en producción');
+  } else if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) {
+    throw new Error(
+      'Los usuarios demo necesitan SUPABASE_URL y SUPABASE_SECRET_KEY',
+    );
+  } else {
+    for (const user of USERS) {
+      const result = await seedUser(user, categories);
+      console.log(`   ${user.email} / ${user.password} (${result})`);
+    }
   }
   console.log('✅ Seed completado.');
 }
