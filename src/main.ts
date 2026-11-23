@@ -1,3 +1,5 @@
+// Sentry first: it has to load before Nest to hook into it.
+import './instrument';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';

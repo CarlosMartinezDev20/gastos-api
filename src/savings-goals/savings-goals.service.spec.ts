@@ -45,6 +45,37 @@ function setup(balance = 100) {
 }
 
 describe('SavingsGoalsService', () => {
+  it('stores the target date as a day and answers it as YYYY-MM-DD', async () => {
+    const { prisma, service } = setup();
+    prisma.savingsGoal.update.mockReturnValue({
+      ...goal,
+      targetDate: new Date('2027-06-30T00:00:00Z'),
+    });
+    const result = await service.update('u1', 'g1', {
+      targetDate: '2027-06-30',
+    });
+    expect(prisma.savingsGoal.update).toHaveBeenCalledWith({
+      where: { id: 'g1' },
+      data: { targetDate: new Date('2027-06-30T00:00:00Z') },
+    });
+    expect(result.targetDate).toBe('2027-06-30');
+  });
+
+  it('clears the target date with null and keeps it when absent', async () => {
+    const { prisma, service } = setup();
+    await service.update('u1', 'g1', { targetDate: null });
+    expect(prisma.savingsGoal.update).toHaveBeenLastCalledWith({
+      where: { id: 'g1' },
+      data: { targetDate: null },
+    });
+    const result = await service.update('u1', 'g1', { name: 'PC' });
+    expect(prisma.savingsGoal.update).toHaveBeenLastCalledWith({
+      where: { id: 'g1' },
+      data: { name: 'PC' },
+    });
+    expect(result.targetDate).toBeNull();
+  });
+
   it('reports progress capped at 100%', async () => {
     const { prisma, service } = setup();
     prisma.savingsGoal.update.mockReturnValue({ ...goal, savedAmount: 900 });

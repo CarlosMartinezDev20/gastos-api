@@ -1,9 +1,12 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsISO8601,
   IsNotEmpty,
   IsNumber,
+  IsOptional,
   IsPositive,
   IsString,
+  Matches,
   MaxLength,
 } from 'class-validator';
 
@@ -36,4 +39,14 @@ export class CreateSavingsGoalDto {
   @IsNotEmpty()
   @MaxLength(40)
   iconColor: string;
+
+  @ApiPropertyOptional({
+    example: '2027-06-30',
+    description:
+      'Día en que se quiere llegar a la meta (AAAA-MM-DD). null lo quita.',
+  })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'La fecha debe ser AAAA-MM-DD' })
+  @IsISO8601({ strict: true }, { message: 'La fecha no es válida' })
+  targetDate?: string | null;
 }

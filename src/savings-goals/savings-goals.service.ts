@@ -12,6 +12,17 @@ import { AddFundsDto } from './dto/add-funds.dto';
 import { UpdateSavingsGoalDto } from './dto/update-savings-goal.dto';
 import { money, Money } from '../common/money';
 
+/** `YYYY-MM-DD` → the Date Prisma stores in a DATE column; null clears it. */
+function goalData<T extends { targetDate?: string | null }>(dto: T) {
+  const { targetDate, ...rest } = dto;
+  if (targetDate === undefined) return rest;
+  return {
+    ...rest,
+    targetDate:
+      targetDate === null ? null : new Date(`${targetDate}T00:00:00Z`),
+  };
+}
+
 @Injectable()
 export class SavingsGoalsService {
   constructor(
@@ -21,7 +32,11 @@ export class SavingsGoalsService {
   ) {}
 
   private mapWithProgress<
-    T extends { targetAmount: Money; savedAmount: Money },
+    T extends {
+      targetAmount: Money;
+      savedAmount: Money;
+      targetDate?: Date | null;
+    },
   >(goal: T) {
     const targetAmount = money(goal.targetAmount);
     const savedAmount = money(goal.savedAmount);
@@ -29,7 +44,14 @@ export class SavingsGoalsService {
       targetAmount > 0
         ? Math.min(100, Math.round((savedAmount / targetAmount) * 10000) / 100)
         : 0;
-    return { ...goal, targetAmount, savedAmount, progressPercent };
+    return {
+      ...goal,
+      targetAmount,
+      savedAmount,
+      progressPercent,
+      // A calendar day, not an instant: answered as `YYYY-MM-DD`.
+      targetDate: goal.targetDate?.toISOString().slice(0, 10) ?? null,
+    };
   }
 
   async findAll(userId: string) {
@@ -42,7 +64,7 @@ export class SavingsGoalsService {
 
   async create(userId: string, dto: CreateSavingsGoalDto) {
     const goal = await this.prisma.savingsGoal.create({
-      data: { ...dto, userId },
+      data: { ...goalData(dto), userId },
     });
     return this.mapWithProgress(goal);
   }
@@ -50,7 +72,7 @@ export class SavingsGoalsService {
   async update(userId: string, id: string, dto: UpdateSavingsGoalDto) {
     await this.findOwned(userId, id);
     const [goal] = await this.prisma.$transaction([
-      this.prisma.savingsGoal.update({ where: { id }, data: dto }),
+      this.prisma.savingsGoal.update({ where: { id }, data: goalData(dto) }),
       // Keep contribution and withdrawal titles in sync with the goal name.
       ...(dto.name
         ? [

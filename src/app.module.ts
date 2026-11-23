@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
@@ -17,6 +18,8 @@ import { validateEnv } from './config/env';
 
 @Module({
   imports: [
+    // Reports unexpected errors (not 4xx) when SENTRY_DSN is set.
+    SentryModule.forRoot(),
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ThrottlerModule.forRoot([
       {
@@ -38,6 +41,7 @@ import { validateEnv } from './config/env';
     HealthModule,
   ],
   providers: [
+    { provide: APP_FILTER, useClass: SentryGlobalFilter },
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,

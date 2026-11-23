@@ -163,7 +163,8 @@ site_url = "http://localhost:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = []
+# The Android/iOS app's deep link (Env.authRedirectUrl): reset and confirmation links.
+additional_redirect_urls = ["io.github.carlosmartinezdev20.appgastos://auth-callback"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -236,20 +237,27 @@ otp_length = 8
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 3600
 
-# Use a production-ready SMTP server
+# appgastos: external SMTP, prepared but OFF (see supabase/SMTP.md). To turn
+# it on: fill host/user/sender, export SUPABASE_AUTH_SMTP_PASS in your shell
+# (never in git), uncomment this block and the Spanish templates below, run
+# `supabase config push`, test a reset email, and only then set
+# [auth.email] enable_confirmations = true and push again.
 # [auth.email.smtp]
 # enabled = true
-# host = "smtp.sendgrid.net"
-# port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
-
-# Uncomment to customize email template
-# [auth.email.template.invite]
-# subject = "You have been invited"
-# content_path = "./supabase/templates/invite.html"
+# host = "smtp.resend.com"
+# port = 465
+# user = "resend"
+# pass = "env(SUPABASE_AUTH_SMTP_PASS)"
+# admin_email = "no-reply@TU-DOMINIO"
+# sender_name = "Miaunero"
+#
+# [auth.email.template.confirmation]
+# subject = "Confirma tu cuenta de Miaunero"
+# content_path = "./supabase/templates/confirmation.html"
+#
+# [auth.email.template.recovery]
+# subject = "Restablece tu contraseña de Miaunero"
+# content_path = "./supabase/templates/recovery.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]

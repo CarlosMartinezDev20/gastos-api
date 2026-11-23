@@ -178,4 +178,27 @@ describe('Isolation between users and the wallet (e2e)', () => {
       expect.objectContaining({ id: tx.id, amount: 80.1 }),
     ]);
   });
+
+  it('sets, validates and clears a goal target date', async () => {
+    const path = `/savings-goals/${goal.id as string}`;
+    const set = await api()
+      .patch(path)
+      .set('Authorization', alice)
+      .send({ targetDate: '2027-02-28' })
+      .expect(200);
+    expect((set.body as Body).targetDate).toBe('2027-02-28');
+    for (const targetDate of ['2027-02-30', '28/02/2027', '2027-02-28T10:00']) {
+      await api()
+        .patch(path)
+        .set('Authorization', alice)
+        .send({ targetDate })
+        .expect(400);
+    }
+    const cleared = await api()
+      .patch(path)
+      .set('Authorization', alice)
+      .send({ targetDate: null })
+      .expect(200);
+    expect((cleared.body as Body).targetDate).toBeNull();
+  });
 });
