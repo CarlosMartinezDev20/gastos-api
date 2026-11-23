@@ -1,7 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
+import { AccentColor, ThemeMode } from '@prisma/client';
 import { SupabaseAuthClient } from '../auth/supabase-auth.client';
 import { PrismaService } from '../prisma/prisma.service';
-import { UsersService } from './users.service';
+import { appearance, UsersService } from './users.service';
 
 function setup() {
   const prisma = {
@@ -48,5 +49,44 @@ describe('UsersService', () => {
     expect(prisma.$transaction.mock.invocationCallOrder[0]).toBeLessThan(
       auth.deleteUser.mock.invocationCallOrder[0],
     );
+  });
+});
+
+describe('appearance', () => {
+  it('mirrors themeMode into darkMode for older app versions', () => {
+    expect(appearance({ themeMode: ThemeMode.DARK })).toEqual({
+      themeMode: ThemeMode.DARK,
+      darkMode: true,
+    });
+    expect(appearance({ themeMode: ThemeMode.SYSTEM })).toEqual({
+      themeMode: ThemeMode.SYSTEM,
+      darkMode: false,
+    });
+  });
+
+  it("turns an older version's darkMode into themeMode", () => {
+    expect(appearance({ darkMode: true })).toEqual({
+      darkMode: true,
+      themeMode: ThemeMode.DARK,
+    });
+    expect(appearance({ darkMode: false })).toEqual({
+      darkMode: false,
+      themeMode: ThemeMode.LIGHT,
+    });
+  });
+
+  it('lets themeMode win when both come, and passes the accent through', () => {
+    expect(
+      appearance({
+        darkMode: true,
+        themeMode: ThemeMode.LIGHT,
+        accent: AccentColor.VIOLET,
+      }),
+    ).toEqual({
+      darkMode: false,
+      themeMode: ThemeMode.LIGHT,
+      accent: AccentColor.VIOLET,
+    });
+    expect(appearance({ name: 'Ana' })).toEqual({ name: 'Ana' });
   });
 });

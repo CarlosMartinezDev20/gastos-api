@@ -1,6 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { AccentColor, ThemeMode } from '@prisma/client';
 import {
   IsBoolean,
+  IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -23,9 +25,20 @@ export class UpdateProfileDto {
 
   @ApiPropertyOptional({
     example: true,
-    description: 'Alternar tema Material 3',
+    description:
+      'Tema oscuro (versiones anteriores de la app). Equivale a themeMode DARK/LIGHT.',
   })
   @IsOptional()
   @IsBoolean()
   darkMode?: boolean;
+
+  @ApiPropertyOptional({ enum: ThemeMode, example: ThemeMode.SYSTEM })
+  @IsOptional()
+  @IsEnum(ThemeMode)
+  themeMode?: ThemeMode;
+
+  @ApiPropertyOptional({ enum: AccentColor, example: AccentColor.LIME })
+  @IsOptional()
+  @IsEnum(AccentColor)
+  accent?: AccentColor;
 }

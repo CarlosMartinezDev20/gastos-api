@@ -51,7 +51,28 @@ describe('API (e2e)', () => {
         .get('/users/profile')
         .set('Authorization', auth)
         .expect(200);
-      expect(profile.body).toMatchObject({ email, name: 'Prueba e2e' });
+      expect(profile.body).toMatchObject({
+        email,
+        name: 'Prueba e2e',
+        darkMode: false,
+        themeMode: 'LIGHT',
+        accent: 'LIME',
+      });
+      const themed = await request(app.getHttpServer())
+        .patch('/users/profile')
+        .set('Authorization', auth)
+        .send({ themeMode: 'DARK', accent: 'VIOLET' })
+        .expect(200);
+      expect(themed.body).toMatchObject({
+        darkMode: true,
+        themeMode: 'DARK',
+        accent: 'VIOLET',
+      });
+      await request(app.getHttpServer())
+        .patch('/users/profile')
+        .set('Authorization', auth)
+        .send({ accent: 'PINK' })
+        .expect(400);
       const balance = await request(app.getHttpServer())
         .get('/transactions/balance')
         .set('Authorization', auth)

@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma, ThemeMode } from '@prisma/client';
 import { SupabaseAuthClient } from '../auth/supabase-auth.client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -13,6 +14,8 @@ const profileSelect = {
   email: true,
   avatarUrl: true,
   darkMode: true,
+  themeMode: true,
+  accent: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -38,7 +41,7 @@ export class UsersService {
   async updateProfile(userId: string, dto: UpdateProfileDto) {
     return this.prisma.user.update({
       where: { id: userId },
-      data: dto,
+      data: appearance(dto),
       select: profileSelect,
     });
   }
@@ -61,4 +64,18 @@ export class UsersService {
     ]);
     await this.auth.deleteUser(userId);
   }
+}
+
+/**
+ * Keeps darkMode (read by older app versions) and themeMode in step:
+ * themeMode wins when both come; SYSTEM reads as light to older versions.
+ */
+export function appearance(dto: UpdateProfileDto): Prisma.UserUpdateInput {
+  const data: Prisma.UserUpdateInput = { ...dto };
+  if (dto.themeMode !== undefined) {
+    data.darkMode = dto.themeMode === ThemeMode.DARK;
+  } else if (dto.darkMode !== undefined) {
+    data.themeMode = dto.darkMode ? ThemeMode.DARK : ThemeMode.LIGHT;
+  }
+  return data;
 }
